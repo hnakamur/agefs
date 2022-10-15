@@ -16,3 +16,5 @@ require (
 	golang.org/x/sys v0.0.0-20210903071746-97244b99971b // indirect
 	golang.org/x/term v0.0.0-20220919170432-7a66f970e087 // indirect
 )
+
+replace github.com/hnakamur/ageutil => ../ageutil
