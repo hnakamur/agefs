@@ -7,9 +7,7 @@ package agefs
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -19,7 +17,6 @@ import (
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/hnakamur/ageutil"
-	"go.uber.org/multierr"
 	"golang.org/x/sys/unix"
 )
 
@@ -50,7 +47,6 @@ var _ = (fs.FileAllocater)((*ageFSFile)(nil))
 
 func NewFile(fd int, relPath string, node *Node) *ageFSFile {
 	shouldEncrypt := node.AgeFSRoot().shouldEncrypt(relPath)
-	log.Printf("NewFile, path=%s, relPath=%s, shouldEncrypt=%v", node.path(), node.relPath(), shouldEncrypt)
 	return &ageFSFile{
 		fd:            fd,
 		relPath:       relPath,
@@ -103,7 +99,6 @@ func (f *ageFSFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.R
 }
 
 func (f *ageFSFile) Write(ctx context.Context, data []byte, off int64) (uint32, syscall.Errno) {
-	log.Printf("ageFSFile.Write start, data=%s, off=%d, relPath=%s, shouldEncrypt=%v", data, off, f.relPath, f.shouldEncrypt)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -122,7 +117,6 @@ func (f *ageFSFile) Write(ctx context.Context, data []byte, off int64) (uint32, 
 		f.buf = newBuf
 	}
 	copy(f.buf[off:end], data)
-	log.Printf("ageFSFile.Write updated buf=%s", string(f.buf))
 	return uint32(len(data)), fs.OK
 }
 
@@ -176,33 +170,8 @@ func (f *ageFSFile) saveEncrypted(ctx context.Context) (err error) {
 
 	root := f.node.AgeFSRoot()
 	path := filepath.Join(root.LoopbackRoot.Path, f.relPath)
-	dir := filepath.Dir(path)
-	pattern := "." + filepath.Base(path) + "."
-	tf, err := os.CreateTemp(dir, pattern)
-	if err != nil {
-		return fmt.Errorf("create temp encrypted file, dir=%s, pattern=%s: %s", dir, pattern, err)
-	}
-	defer func() {
-		if err != nil {
-			err = multierr.Append(err, os.Remove(tf.Name()))
-		}
-	}()
-
-	tfst := syscall.Stat_t{}
-	if err = syscall.Fstat(int(tf.Fd()), &tfst); err != nil {
-		return err
-	}
-
-	st := syscall.Stat_t{}
-	if err = syscall.Lstat(path, &st); err != nil {
-		return err
-	}
-	if err = tf.Chmod(os.FileMode(st.Mode) & os.ModePerm); err != nil {
-		return err
-	}
-	log.Printf("tfst.Ino=%d, st.Ino=%d", tfst.Ino, st.Ino)
-
-	w, err := age.Encrypt(tf, root.recipients...)
+	file := os.NewFile(uintptr(f.fd), path)
+	w, err := age.Encrypt(file, root.recipients...)
 	if err != nil {
 		return err
 	}
@@ -212,21 +181,6 @@ func (f *ageFSFile) saveEncrypted(ctx context.Context) (err error) {
 	if err := w.Close(); err != nil {
 		return err
 	}
-	if err = tf.Sync(); err != nil {
-		return fmt.Errorf("sync temp encrypted file, path=%s: %s", tf.Name(), err)
-	}
-	if err = tf.Close(); err != nil {
-		return fmt.Errorf("close temp encrypted file, path=%s: %s", tf.Name(), err)
-	}
-	if err = os.Rename(tf.Name(), path); err != nil {
-		return fmt.Errorf("rename temp encrypted file, tempName=%s, path=%s: %s", tf.Name(), path, err)
-	}
-
-	st2 := syscall.Stat_t{}
-	if err = syscall.Lstat(path, &st2); err != nil {
-		return err
-	}
-	log.Printf("st.Ino=%d, st2.Ino=%d", st.Ino, st2.Ino)
 
 	f.dirty = false
 	return nil

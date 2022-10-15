@@ -2,7 +2,6 @@ package agefs
 
 import (
 	"context"
-	"log"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -50,7 +49,6 @@ func (n *Node) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFl
 	}
 
 	relPath := n.relPath()
-	log.Printf("agefs.Node.Open calling NewFile, relPath=%q", relPath)
 	lf := NewFile(f, relPath, n)
 	return lf, 0, 0
 }
@@ -74,7 +72,6 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	node := n.AgeFSRoot().newNode(n.EmbeddedInode(), name, &st)
 	ch := n.NewInode(ctx, node, n.AgeFSRoot().idFromStat(&st))
 	relPath := filepath.Join(n.relPath(), name)
-	log.Printf("agefs.Node.Create calling NewFile, relPath=%q, nodeId=%d", relPath, n.LoopbackNode.StableAttr().Ino)
 	lf := NewFile(fd, relPath, n)
 
 	out.FromStat(&st)
