@@ -1,4 +1,4 @@
-module github.com/hnakamur/agefuse
+module github.com/hnakamur/agefs
 
 go 1.19
 
