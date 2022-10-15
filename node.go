@@ -2,11 +2,14 @@ package agefs
 
 import (
 	"context"
+	"log"
+	"os"
 	"path/filepath"
 	"syscall"
 	"unsafe"
 
 	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
 type Node struct {
@@ -46,8 +49,36 @@ func (n *Node) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFl
 		return nil, 0, fs.ToErrno(err)
 	}
 
-	lf := NewFile(f, n)
+	relPath := n.relPath()
+	log.Printf("agefs.Node.Open calling NewFile, relPath=%q", relPath)
+	lf := NewFile(f, relPath, n)
 	return lf, 0, 0
+}
+
+var _ = (fs.NodeCreater)((*Node)(nil))
+
+func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (inode *fs.Inode, fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
+	p := filepath.Join(n.path(), name)
+	flags = flags &^ syscall.O_APPEND
+	fd, err := syscall.Open(p, int(flags)|os.O_CREATE, mode)
+	if err != nil {
+		return nil, nil, 0, fs.ToErrno(err)
+	}
+	n.preserveOwner(ctx, p)
+	st := syscall.Stat_t{}
+	if err := syscall.Fstat(fd, &st); err != nil {
+		syscall.Close(fd)
+		return nil, nil, 0, fs.ToErrno(err)
+	}
+
+	node := n.AgeFSRoot().newNode(n.EmbeddedInode(), name, &st)
+	ch := n.NewInode(ctx, node, n.AgeFSRoot().idFromStat(&st))
+	relPath := filepath.Join(n.relPath(), name)
+	log.Printf("agefs.Node.Create calling NewFile, relPath=%q, nodeId=%d", relPath, n.LoopbackNode.StableAttr().Ino)
+	lf := NewFile(fd, relPath, n)
+
+	out.FromStat(&st)
+	return ch, lf, 0, 0
 }
 
 // path returns the full path to the file in the underlying file
@@ -59,4 +90,17 @@ func (n *Node) path() string {
 
 func (n *Node) relPath() string {
 	return n.Path(n.Root())
+}
+
+// preserveOwner sets uid and gid of `path` according to the caller information
+// in `ctx`.
+func (n *Node) preserveOwner(ctx context.Context, path string) error {
+	if os.Getuid() != 0 {
+		return nil
+	}
+	caller, ok := fuse.FromContext(ctx)
+	if !ok {
+		return nil
+	}
+	return syscall.Lchown(path, int(caller.Uid), int(caller.Gid))
 }
