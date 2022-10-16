@@ -24,7 +24,7 @@ type ageFSFile struct {
 	mu            sync.Mutex
 	fd            int
 	relPath       string
-	node          *Node
+	node          *ageFSNode
 	shouldEncrypt bool
 	buf           []byte
 	dirty         bool
@@ -45,8 +45,8 @@ var _ = (fs.FileFsyncer)((*ageFSFile)(nil))
 var _ = (fs.FileSetattrer)((*ageFSFile)(nil))
 var _ = (fs.FileAllocater)((*ageFSFile)(nil))
 
-func NewFile(fd int, relPath string, node *Node) *ageFSFile {
-	shouldEncrypt := node.AgeFSRoot().shouldEncrypt(relPath)
+func newFile(fd int, relPath string, node *ageFSNode) fs.FileHandle {
+	shouldEncrypt := node.root().shouldEncrypt(relPath)
 	return &ageFSFile{
 		fd:            fd,
 		relPath:       relPath,
@@ -82,7 +82,7 @@ func (f *ageFSFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.R
 			return nil, fs.ToErrno(io.EOF)
 		}
 
-		ew, err := ageutil.NewDecryptingReader(f.node.AgeFSRoot().identities, bytes.NewReader(encryptedBuf))
+		ew, err := ageutil.NewDecryptingReader(f.node.root().identities, bytes.NewReader(encryptedBuf))
 		if err != nil {
 			return nil, fs.ToErrno(err)
 		}
@@ -172,7 +172,7 @@ func (f *ageFSFile) saveEncrypted(ctx context.Context) (err error) {
 		return nil
 	}
 
-	root := f.node.AgeFSRoot()
+	root := f.node.root()
 	path := filepath.Join(root.LoopbackRoot.Path, f.relPath)
 	file := os.NewFile(uintptr(f.fd), path)
 	w, err := age.Encrypt(file, root.recipients...)

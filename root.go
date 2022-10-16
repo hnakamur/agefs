@@ -10,7 +10,7 @@ import (
 
 type ShouldEncryptFunc func(path string) bool
 
-type Root struct {
+type ageFSRoot struct {
 	fs.LoopbackRoot
 	identities    []age.Identity
 	recipients    []age.Recipient
@@ -29,12 +29,12 @@ func NewRoot(rootPath string, identities []age.Identity, shouldEncrypt ShouldEnc
 		return nil, err
 	}
 
-	root := &Root{
+	root := &ageFSRoot{
 		LoopbackRoot: fs.LoopbackRoot{
 			Path: rootPath,
 			Dev:  uint64(st.Dev),
 			NewNode: func(rootData *fs.LoopbackRoot, parent *fs.Inode, name string, st *syscall.Stat_t) fs.InodeEmbedder {
-				n := &Node{
+				n := &ageFSNode{
 					LoopbackNode: fs.LoopbackNode{
 						RootData: rootData,
 					},
@@ -50,18 +50,18 @@ func NewRoot(rootPath string, identities []age.Identity, shouldEncrypt ShouldEnc
 	return root.newNode(nil, "", &st), nil
 }
 
-func (r *Root) newNode(parent *fs.Inode, name string, st *syscall.Stat_t) fs.InodeEmbedder {
+func (r *ageFSRoot) newNode(parent *fs.Inode, name string, st *syscall.Stat_t) fs.InodeEmbedder {
 	if r.NewNode != nil {
 		return r.LoopbackRoot.NewNode(&r.LoopbackRoot, parent, name, st)
 	}
-	return &Node{
+	return &ageFSNode{
 		LoopbackNode: fs.LoopbackNode{
 			RootData: &r.LoopbackRoot,
 		},
 	}
 }
 
-func (r *Root) idFromStat(st *syscall.Stat_t) fs.StableAttr {
+func (r *ageFSRoot) idFromStat(st *syscall.Stat_t) fs.StableAttr {
 	// We compose an inode number by the underlying inode, and
 	// mixing in the device number. In traditional filesystems,
 	// the inode numbers are small. The device numbers are also
