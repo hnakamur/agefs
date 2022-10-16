@@ -83,14 +83,7 @@ func main() {
 		}
 	}
 
-	readPassphrase := func() ([]byte, error) {
-		pass, err := ageutil.ReadSecretFromTerminal(fmt.Sprintf("Enter passphrase for %q:", *privName))
-		if err != nil {
-			return nil, fmt.Errorf("could not read passphrase for %q: %v", *privName, err)
-		}
-		return pass, nil
-	}
-	identities, err := ageutil.ParseSSHPrivateKeyFile(*privName, readPassphrase)
+	identities, err := ageutil.ParseIdentitiesFile(*privName)
 	if err != nil {
 		fmt.Printf("failed to load private key: %s", err)
 		os.Exit(1)

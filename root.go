@@ -4,8 +4,8 @@ import (
 	"syscall"
 
 	"filippo.io/age"
-	"filippo.io/age/agessh"
 	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/hnakamur/ageutil"
 )
 
 type ShouldEncryptFunc func(path string) bool
@@ -18,8 +18,13 @@ type Root struct {
 }
 
 func NewRoot(rootPath string, identities []age.Identity, shouldEncrypt ShouldEncryptFunc) (fs.InodeEmbedder, error) {
+	recipients, err := ageutil.IdentitiesToRecipients(identities)
+	if err != nil {
+		return nil, err
+	}
+
 	var st syscall.Stat_t
-	err := syscall.Stat(rootPath, &st)
+	err = syscall.Stat(rootPath, &st)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +43,7 @@ func NewRoot(rootPath string, identities []age.Identity, shouldEncrypt ShouldEnc
 			},
 		},
 		identities:    identities,
-		recipients:    recipients(identities),
+		recipients:    recipients,
 		shouldEncrypt: shouldEncrypt,
 	}
 
@@ -72,26 +77,5 @@ func (r *Root) idFromStat(st *syscall.Stat_t) fs.StableAttr {
 		// This should work well for traditional backing FSes,
 		// not so much for other go-fuse FS-es
 		Ino: (swapped ^ swappedRootDev) ^ st.Ino,
-	}
-}
-
-func recipients(identities []age.Identity) []age.Recipient {
-	recipients := make([]age.Recipient, len(identities))
-	for i, identity := range identities {
-		recipients[i] = recipientFromIdentity(identity)
-	}
-	return recipients
-}
-
-func recipientFromIdentity(identity age.Identity) age.Recipient {
-	switch i := identity.(type) {
-	case *agessh.EncryptedSSHIdentity:
-		return i.Recipient()
-	case *agessh.Ed25519Identity:
-		return i.Recipient()
-	case *agessh.RSAIdentity:
-		return i.Recipient()
-	default:
-		return nil
 	}
 }

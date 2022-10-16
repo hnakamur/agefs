@@ -82,8 +82,12 @@ func (f *ageFSFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.R
 			return nil, fs.ToErrno(io.EOF)
 		}
 
+		ew, err := ageutil.NewDecryptingReader(f.node.AgeFSRoot().identities, bytes.NewReader(encryptedBuf))
+		if err != nil {
+			return nil, fs.ToErrno(err)
+		}
 		var decrypted bytes.Buffer
-		if err := ageutil.Decrypt(f.node.AgeFSRoot().identities, bytes.NewReader(encryptedBuf), &decrypted); err != nil {
+		if _, err := io.Copy(&decrypted, ew); err != nil {
 			return nil, fs.ToErrno(err)
 		}
 		f.buf = decrypted.Bytes()
