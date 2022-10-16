@@ -219,14 +219,16 @@ func mountAction(identityFilename, srcDir, mountpoint string,
 		log.Fatalf("Mount fail: %v\n", err)
 	}
 	if !quiet {
-		fmt.Println("Mounted!")
+		opts.Logger.Println("Mounted!")
 	}
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		s := <-c
-		log.Printf("Got signal: %s, unmounting and exiting", s)
+		if !quiet {
+			opts.Logger.Printf("Got signal: %s, unmounting and exiting", s)
+		}
 		server.Unmount()
 	}()
 
