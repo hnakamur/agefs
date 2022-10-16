@@ -7,8 +7,8 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"runtime/pprof"
-	"strings"
 	"syscall"
 	"time"
 
@@ -83,19 +83,24 @@ func main() {
 		}
 	}
 
+	orig := flag.Arg(0)
+	mountpoint := flag.Arg(1)
+
 	identities, err := ageutil.ParseIdentitiesFile(*privName)
 	if err != nil {
 		fmt.Printf("failed to load private key: %s", err)
 		os.Exit(1)
 	}
 
-	orig := flag.Arg(0)
-	shouldEncrypt := func(path string) bool {
-		return strings.HasSuffix(path, ".age") || strings.HasSuffix(path, ".age.pem")
-	}
-	loopbackRoot, err := agefs.NewRoot(orig, identities, shouldEncrypt)
+	ignoreFilename := filepath.Join(orig, ".ageignore")
+	shouldEncrypt, err := agefs.ReadIgnoreFile(ignoreFilename)
 	if err != nil {
-		log.Fatalf("NewLoopbackRoot(%s): %v\n", orig, err)
+		log.Fatalf("read .ageignore file (%s): %v\n", ignoreFilename, err)
+	}
+
+	agefsRoot, err := agefs.NewRoot(orig, identities, shouldEncrypt)
+	if err != nil {
+		log.Fatalf("create agefs root node at (%s): %v\n", orig, err)
 	}
 
 	sec := time.Second
@@ -117,14 +122,14 @@ func main() {
 	// First column in "df -T": original dir
 	opts.MountOptions.Options = append(opts.MountOptions.Options, "fsname="+orig)
 	// Second column in "df -T" will be shown as "fuse." + Name
-	opts.MountOptions.Name = "loopback"
+	opts.MountOptions.Name = "agefs"
 	// Leave file permissions on "000" files as-is
 	opts.NullPermissions = true
 	// Enable diagnostics logging
 	if !*quiet {
 		opts.Logger = log.New(os.Stderr, "", 0)
 	}
-	server, err := fs.Mount(flag.Arg(1), loopbackRoot, opts)
+	server, err := fs.Mount(mountpoint, agefsRoot, opts)
 	if err != nil {
 		log.Fatalf("Mount fail: %v\n", err)
 	}

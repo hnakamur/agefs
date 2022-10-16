@@ -1,0 +1,3 @@
+**
+!letsencrypt/accounts/**/*.key
+!letsencrypt/certificates/*.key
