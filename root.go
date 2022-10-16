@@ -5,7 +5,7 @@ import (
 
 	"filippo.io/age"
 	"github.com/hanwen/go-fuse/v2/fs"
-	"github.com/hnakamur/ageutil"
+	"github.com/hnakamur/agefs/internal/ageutil"
 )
 
 type ShouldEncryptFunc func(path string) bool

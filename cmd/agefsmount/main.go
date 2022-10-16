@@ -14,7 +14,7 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hnakamur/agefs"
-	"github.com/hnakamur/ageutil"
+	"github.com/hnakamur/agefs/internal/ageutil"
 )
 
 func writeMemProfile(fn string, sigs <-chan os.Signal) {

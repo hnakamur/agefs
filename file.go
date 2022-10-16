@@ -16,7 +16,7 @@ import (
 	"filippo.io/age"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
-	"github.com/hnakamur/ageutil"
+	"github.com/hnakamur/agefs/internal/ageutil"
 	"golang.org/x/sys/unix"
 )
 
