@@ -125,7 +125,7 @@ func (n *ageFSNode) preserveOwner(ctx context.Context, path string) error {
 }
 
 func fixAttrSize(path string, outSize *uint64) error {
-	sz, err := getUnencSize(path)
+	sz, err := getDecryptedSizeFromXattr(path)
 	if err != nil {
 		if errors.Is(err, syscall.ENODATA) {
 			return nil
@@ -136,9 +136,9 @@ func fixAttrSize(path string, outSize *uint64) error {
 	return nil
 }
 
-func getUnencSize(path string) (uint64, error) {
+func getDecryptedSizeFromXattr(path string) (uint64, error) {
 	var buf [24]byte
-	sz, err := syscall.Getxattr(path, xattrNameUnencSize, buf[:])
+	sz, err := syscall.Getxattr(path, xattrNameDecryptedSize, buf[:])
 	if err != nil {
 		return 0, err
 	}

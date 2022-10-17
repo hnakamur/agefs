@@ -47,7 +47,7 @@ var _ = (fs.FileFsyncer)((*ageFSFile)(nil))
 var _ = (fs.FileSetattrer)((*ageFSFile)(nil))
 var _ = (fs.FileAllocater)((*ageFSFile)(nil))
 
-const xattrNameUnencSize = "user.agefs_unenc_size"
+const xattrNameDecryptedSize = "user.agefs_decrypted_size"
 
 func newFile(fd int, relPath string, node *ageFSNode) *ageFSFile {
 	shouldEncrypt := node.root().shouldEncrypt(relPath)
@@ -190,7 +190,7 @@ func (f *ageFSFile) saveEncrypted(ctx context.Context) (err error) {
 
 	// Set unencrypted file size as a xattr attribute.
 	value := strconv.FormatUint(uint64(len(f.buf)), 10)
-	if err := syscall.Setxattr(path, xattrNameUnencSize, []byte(value), 0); err != nil {
+	if err := syscall.Setxattr(path, xattrNameDecryptedSize, []byte(value), 0); err != nil {
 		return err
 	}
 
