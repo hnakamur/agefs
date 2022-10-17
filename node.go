@@ -102,8 +102,10 @@ func (n *ageFSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut)
 	out.Attr.FromStat(&st)
 
 	// override file size with unencrpyted size
-	if err := fixAttrSize(p, &out.Attr.Size); err != nil {
-		return nil, fs.ToErrno(err)
+	if n.root().shouldEncrypt(p) {
+		if err := fixAttrSize(p, &out.Attr.Size); err != nil {
+			return nil, fs.ToErrno(err)
+		}
 	}
 
 	node := n.root().newNode(n.EmbeddedInode(), name, &st)
