@@ -2,7 +2,6 @@ package agefs
 
 import (
 	"context"
-	"log"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -91,7 +90,6 @@ func (n *ageFSNode) relPath() string {
 
 func (n *ageFSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	p := filepath.Join(n.path(), name)
-	log.Printf("ageFSNode.Lookup path=%s", p)
 
 	st := syscall.Stat_t{}
 	err := syscall.Lstat(p, &st)
@@ -101,7 +99,7 @@ func (n *ageFSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut)
 
 	out.Attr.FromStat(&st)
 
-	log.Printf("ageFSNode.Lookup calling fixAttrSize, path=%s", n.path())
+	// override file size with unencrpyted size
 	if err := fixAttrSize(p, &out.Attr.Size); err != nil {
 		return nil, fs.ToErrno(err)
 	}
@@ -122,113 +120,4 @@ func (n *ageFSNode) preserveOwner(ctx context.Context, path string) error {
 		return nil
 	}
 	return syscall.Lchown(path, int(caller.Uid), int(caller.Gid))
-}
-
-func (n *ageFSNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
-	log.Printf("ageFSNode.Readdir, path=%s", n.path())
-	return fs.NewLoopbackDirStream(n.path())
-}
-
-func (n *ageFSNode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
-	log.Printf("ageFSNode.Getattr path=%s, f=%v (%T)", n.path(), f, f)
-	if f != nil {
-		return f.(fs.FileGetattrer).Getattr(ctx, out)
-	}
-
-	p := n.path()
-
-	var err error
-	st := syscall.Stat_t{}
-	if &n.Inode == n.Root() {
-		err = syscall.Stat(p, &st)
-	} else {
-		err = syscall.Lstat(p, &st)
-	}
-
-	if err != nil {
-		return fs.ToErrno(err)
-	}
-	out.FromStat(&st)
-
-	// log.Printf("ageFSNode.Getattr calling fixAttrSize, path=%s", n.path())
-	// if err := fixAttrSize(p, out); err != nil {
-	// 	return fs.ToErrno(err)
-	// }
-
-	return fs.OK
-}
-
-func (n *ageFSNode) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
-	p := n.path()
-	log.Printf("ageFSFile.Setattr start, path=%v, in=%+v, f=%v", p, in, f)
-	if in != nil {
-		log.Printf("ageFSFile.Setattr start, path=%v, in.Size=%+v", p, in.Size)
-	}
-	fsa, ok := f.(fs.FileSetattrer)
-	if ok && fsa != nil {
-		fsa.Setattr(ctx, in, out)
-	} else {
-		if m, ok := in.GetMode(); ok {
-			if err := syscall.Chmod(p, m); err != nil {
-				return fs.ToErrno(err)
-			}
-		}
-
-		uid, uok := in.GetUID()
-		gid, gok := in.GetGID()
-		if uok || gok {
-			suid := -1
-			sgid := -1
-			if uok {
-				suid = int(uid)
-			}
-			if gok {
-				sgid = int(gid)
-			}
-			if err := syscall.Chown(p, suid, sgid); err != nil {
-				return fs.ToErrno(err)
-			}
-		}
-
-		mtime, mok := in.GetMTime()
-		atime, aok := in.GetATime()
-
-		if mok || aok {
-
-			ap := &atime
-			mp := &mtime
-			if !aok {
-				ap = nil
-			}
-			if !mok {
-				mp = nil
-			}
-			var ts [2]syscall.Timespec
-			ts[0] = fuse.UtimeToTimespec(ap)
-			ts[1] = fuse.UtimeToTimespec(mp)
-
-			if err := syscall.UtimesNano(p, ts[:]); err != nil {
-				return fs.ToErrno(err)
-			}
-		}
-
-		if sz, ok := in.GetSize(); ok {
-			if err := syscall.Truncate(p, int64(sz)); err != nil {
-				return fs.ToErrno(err)
-			}
-		}
-	}
-
-	fga, ok := f.(fs.FileGetattrer)
-	if ok && fga != nil {
-		fga.Getattr(ctx, out)
-	} else {
-		st := syscall.Stat_t{}
-		err := syscall.Lstat(p, &st)
-		if err != nil {
-			return fs.ToErrno(err)
-		}
-		out.FromStat(&st)
-	}
-	return fs.OK
 }

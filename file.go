@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -86,7 +85,6 @@ func (f *ageFSFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.R
 }
 
 func (f *ageFSFile) readAndDecryptFileIfNeeded(fd int) error {
-	log.Printf("readAndDecryptFileIfNeeded start, path=%s, buf=%p", f.path(), f.buf)
 	if f.buf != nil {
 		return nil
 	}
@@ -103,7 +101,6 @@ func (f *ageFSFile) readAndDecryptFileIfNeeded(fd int) error {
 		return err
 	}
 	f.buf = decrypted.Bytes()
-	log.Printf("readAndDecryptFileIfNeeded read finished, buf=%s, len(buf)=%d", string(f.buf), len(f.buf))
 	return nil
 }
 
@@ -144,8 +141,6 @@ func (f *ageFSFile) Flush(ctx context.Context) syscall.Errno {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	log.Printf("ageFSFile.Flush path=%s", f.path())
-
 	// Since Flush() may be called for each dup'd fd, we don't
 	// want to really close the file, we just want to flush. This
 	// is achieved by closing a dup'd fd.
@@ -176,13 +171,11 @@ func (f *ageFSFile) Fsync(ctx context.Context, flags uint32) (errno syscall.Errn
 }
 
 func (f *ageFSFile) saveEncrypted(ctx context.Context) (err error) {
-	log.Printf("ageFSFile.saveEncrypted start, path=%s, dirty=%v, len(f.buf)=%d", f.path(), f.dirty, len(f.buf))
 	if !f.dirty {
 		return nil
 	}
 
 	path := f.path()
-	log.Printf("ageFSFile.saveEncrypted start, path=%s, buf=%s, len(f.buf)=%d, fd=%d", f.path(), string(f.buf), len(f.buf), f.fd)
 	file := os.NewFile(uintptr(f.fd), path)
 
 	w, err := age.Encrypt(file, f.node.root().recipients...)
@@ -263,11 +256,6 @@ func (f *ageFSFile) setLock(ctx context.Context, owner uint64, lk *fuse.FileLock
 }
 
 func (f *ageFSFile) Setattr(ctx context.Context, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
-	log.Printf("ageFSFile.Setattr start, path=%v, in=%+v", f.path(), in)
-	if in != nil {
-		log.Printf("ageFSFile.Setattr start, path=%v, in.Size=%+v", f.path(), in.Size)
-	}
-
 	if errno := f.setAttr(ctx, in); errno != 0 {
 		return errno
 	}
@@ -323,7 +311,6 @@ func (f *ageFSFile) setAttr(ctx context.Context, in *fuse.SetAttrIn) syscall.Err
 	}
 
 	if sz, ok := in.GetSize(); ok {
-		log.Printf("ageFSFile.setAttr changing file size, path=%s, shouldEncrypt=%v, fd=%d, sz=%d, f.buf=%p", f.path(), f.shouldEncrypt, f.fd, sz, f.buf)
 		if f.shouldEncrypt {
 			if sz > 0 && f.buf == nil {
 				fd, err := syscall.Open(f.path(), os.O_RDONLY, 0)
@@ -352,7 +339,6 @@ func (f *ageFSFile) setAttr(ctx context.Context, in *fuse.SetAttrIn) syscall.Err
 				return fs.ToErrno(err)
 			}
 		} else {
-			log.Printf("ageFSFile.setAttr calling Ftruncate, path=%s, fd=%d, sz=%d", f.path(), f.fd, sz)
 			// TODO: truncate f.buf and write it to file instead of call fruncate if encrypted and sz < len(f.buf)
 			// TODO: what to do if sz > len(f.buf)? we cannot make a hole for encrypted file
 			errno = fs.ToErrno(syscall.Ftruncate(f.fd, int64(sz)))
@@ -373,11 +359,6 @@ func (f *ageFSFile) Getattr(ctx context.Context, a *fuse.AttrOut) syscall.Errno 
 		return fs.ToErrno(err)
 	}
 	a.FromStat(&st)
-
-	// log.Printf("ageFSFile.Getattr calling fixAttrSize, path=%s", f.path())
-	// if err := fixAttrSize(f.path(), a); err != nil {
-	// 	return fs.ToErrno(err)
-	// }
 
 	return fs.OK
 }
@@ -404,12 +385,10 @@ func fixAttrSize(path string, outSize *uint64) error {
 func getUnencSize(path string) (uint64, error) {
 	var buf [24]byte
 	sz, err := syscall.Getxattr(path, xattrNameUnencSize, buf[:])
-	log.Printf("getUnencSize: Getxattr xattrNameUnencSize, path=%s, buf=%s, sz=%d, err=%v (%T)", path, buf[:], sz, err, err)
 	if err != nil {
 		return 0, err
 	}
 	szVal, err := strconv.ParseUint(string(buf[:sz]), 10, 64)
-	log.Printf("getUnencSize: Getxattr xattrNameUnencSize, path=%s, szVal=%d, err=%v", path, szVal, err)
 	if err != nil {
 		return 0, err
 	}
