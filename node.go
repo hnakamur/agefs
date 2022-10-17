@@ -2,8 +2,10 @@ package agefs
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"unsafe"
 
@@ -120,4 +122,29 @@ func (n *ageFSNode) preserveOwner(ctx context.Context, path string) error {
 		return nil
 	}
 	return syscall.Lchown(path, int(caller.Uid), int(caller.Gid))
+}
+
+func fixAttrSize(path string, outSize *uint64) error {
+	sz, err := getUnencSize(path)
+	if err != nil {
+		if errors.Is(err, syscall.ENODATA) {
+			return nil
+		}
+		return fs.ToErrno(err)
+	}
+	*outSize = sz
+	return nil
+}
+
+func getUnencSize(path string) (uint64, error) {
+	var buf [24]byte
+	sz, err := syscall.Getxattr(path, xattrNameUnencSize, buf[:])
+	if err != nil {
+		return 0, err
+	}
+	szVal, err := strconv.ParseUint(string(buf[:sz]), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return szVal, nil
 }

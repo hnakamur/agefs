@@ -8,7 +8,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -368,29 +367,4 @@ func (f *ageFSFile) Lseek(ctx context.Context, off uint64, whence uint32) (uint6
 	defer f.mu.Unlock()
 	n, err := unix.Seek(f.fd, int64(off), int(whence))
 	return uint64(n), fs.ToErrno(err)
-}
-
-func fixAttrSize(path string, outSize *uint64) error {
-	sz, err := getUnencSize(path)
-	if err != nil {
-		if errors.Is(err, syscall.ENODATA) {
-			return nil
-		}
-		return fs.ToErrno(err)
-	}
-	*outSize = sz
-	return nil
-}
-
-func getUnencSize(path string) (uint64, error) {
-	var buf [24]byte
-	sz, err := syscall.Getxattr(path, xattrNameUnencSize, buf[:])
-	if err != nil {
-		return 0, err
-	}
-	szVal, err := strconv.ParseUint(string(buf[:sz]), 10, 64)
-	if err != nil {
-		return 0, err
-	}
-	return szVal, nil
 }
