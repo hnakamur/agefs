@@ -11,7 +11,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"syscall"
 
@@ -72,7 +71,7 @@ func (f *ageFSFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.R
 		return r, fs.OK
 	}
 
-	if err := f.readAndDecryptFileIfNeeded(f.fd); err != nil {
+	if err := f.readAndDecryptIfNeeded(f.fd); err != nil {
 		return nil, fs.ToErrno(err)
 	}
 	end := int(off) + len(buf)
@@ -83,24 +82,31 @@ func (f *ageFSFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.R
 	return fuse.ReadResultData(data), fs.OK
 }
 
-func (f *ageFSFile) readAndDecryptFileIfNeeded(fd int) error {
+func (f *ageFSFile) readAndDecryptIfNeeded(fd int) error {
 	if f.buf != nil {
 		return nil
 	}
 
 	file := os.NewFile(uintptr(fd), f.path())
-
-	br := bufio.NewReader(file)
-	ew, err := ageutil.NewDecryptingReader(f.node.root().identities, br)
+	data, err := readAndDecryptFile(file, f.node.root().identities)
 	if err != nil {
 		return err
 	}
+	f.buf = data
+	return nil
+}
+
+func readAndDecryptFile(file *os.File, identities []age.Identity) ([]byte, error) {
+	br := bufio.NewReader(file)
+	ew, err := ageutil.NewDecryptingReader(identities, br)
+	if err != nil {
+		return nil, err
+	}
 	var decrypted bytes.Buffer
 	if _, err := io.Copy(&decrypted, ew); err != nil {
-		return err
+		return nil, err
 	}
-	f.buf = decrypted.Bytes()
-	return nil
+	return decrypted.Bytes(), nil
 }
 
 func (f *ageFSFile) Write(ctx context.Context, data []byte, off int64) (uint32, syscall.Errno) {
@@ -188,9 +194,7 @@ func (f *ageFSFile) saveEncrypted(ctx context.Context) (err error) {
 		return err
 	}
 
-	// Set unencrypted file size as a xattr attribute.
-	value := strconv.FormatUint(uint64(len(f.buf)), 10)
-	if err := syscall.Setxattr(path, xattrNameDecryptedSize, []byte(value), 0); err != nil {
+	if err := setXattrDecryptedSize(path, uint64(len(f.buf))); err != nil {
 		return err
 	}
 
@@ -316,7 +320,7 @@ func (f *ageFSFile) setAttr(ctx context.Context, in *fuse.SetAttrIn) syscall.Err
 				if err != nil {
 					return fs.ToErrno(err)
 				}
-				if err := f.readAndDecryptFileIfNeeded(fd); err != nil {
+				if err := f.readAndDecryptIfNeeded(fd); err != nil {
 					syscall.Close(fd)
 					return fs.ToErrno(err)
 				}

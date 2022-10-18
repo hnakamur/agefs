@@ -102,9 +102,12 @@ func (n *ageFSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut)
 	out.Attr.FromStat(&st)
 
 	// override file size with unencrpyted size
-	if n.root().shouldEncrypt(p) {
-		if err := fixAttrSize(p, &out.Attr.Size); err != nil {
-			return nil, fs.ToErrno(err)
+	if st.Mode&syscall.S_IFREG != 0 {
+		relPath := filepath.Join(n.relPath(), name)
+		if n.root().shouldEncrypt(relPath) {
+			if err := n.fixAttrSize(p, &out.Attr.Size); err != nil {
+				return nil, fs.ToErrno(err)
+			}
 		}
 	}
 
@@ -126,10 +129,15 @@ func (n *ageFSNode) preserveOwner(ctx context.Context, path string) error {
 	return syscall.Lchown(path, int(caller.Uid), int(caller.Gid))
 }
 
-func fixAttrSize(path string, outSize *uint64) error {
-	sz, err := getDecryptedSizeFromXattr(path)
+func (n *ageFSNode) fixAttrSize(path string, outSize *uint64) error {
+	sz, err := getXattrDecryptedSize(path)
 	if err != nil {
 		if errors.Is(err, syscall.ENODATA) {
+			sz, err := n.readFileAndSetXattrDecryptedSize(path)
+			if err != nil {
+				return err
+			}
+			*outSize = sz
 			return nil
 		}
 		return fs.ToErrno(err)
@@ -138,15 +146,42 @@ func fixAttrSize(path string, outSize *uint64) error {
 	return nil
 }
 
-func getDecryptedSizeFromXattr(path string) (uint64, error) {
+func (n *ageFSNode) readFileAndSetXattrDecryptedSize(path string) (uint64, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+
+	data, err := readAndDecryptFile(file, n.root().identities)
+	if err != nil {
+		return 0, err
+	}
+	sz := uint64(len(data))
+
+	if err := setXattrDecryptedSize(path, sz); err != nil {
+		return 0, err
+	}
+	return sz, nil
+}
+
+func getXattrDecryptedSize(path string) (uint64, error) {
 	var buf [24]byte
 	sz, err := syscall.Getxattr(path, xattrNameDecryptedSize, buf[:])
 	if err != nil {
 		return 0, err
 	}
-	szVal, err := strconv.ParseUint(string(buf[:sz]), 10, 64)
+	v, err := strconv.ParseUint(string(buf[:sz]), 10, 64)
 	if err != nil {
 		return 0, err
 	}
-	return szVal, nil
+	return v, nil
+}
+
+func setXattrDecryptedSize(path string, sz uint64) error {
+	value := strconv.FormatUint(sz, 10)
+	if err := syscall.Setxattr(path, xattrNameDecryptedSize, []byte(value), 0); err != nil {
+		return err
+	}
+	return nil
 }
