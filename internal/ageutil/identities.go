@@ -14,10 +14,29 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// ParseIdentitiesFileOption is the option type for [ParseIdentitiesFile].
+type ParseIdentitiesFileOption func(cfg *parseIdentitiesFileConfig)
+
+type parseIdentitiesFileConfig struct {
+	passphrase func() (string, error)
+}
+
+// WithPassphrase sets a function to get the passphrase for decrypting the identity file.
+func WithPassphrase(fn func() (string, error)) ParseIdentitiesFileOption {
+	return func(cfg *parseIdentitiesFileConfig) {
+		cfg.passphrase = fn
+	}
+}
+
 // ParseIdentitiesFile parses a file that contains age or SSH keys. It returns
 // one or more of *age.X25519Identity, *agessh.RSAIdentity, *agessh.Ed25519Identity,
 // *agessh.EncryptedSSHIdentity, or *EncryptedIdentity.
-func ParseIdentitiesFile(name string) ([]age.Identity, error) {
+func ParseIdentitiesFile(name string, opts ...ParseIdentitiesFileOption) ([]age.Identity, error) {
+	var cfg parseIdentitiesFileConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	f, err := os.Open(name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %v", err)
@@ -43,15 +62,19 @@ func ParseIdentitiesFile(name string) ([]age.Identity, error) {
 		if len(contents) == privateKeySizeLimit {
 			return nil, fmt.Errorf("failed to read %q: file too long", name)
 		}
-		return []age.Identity{&encryptedIdentity{
-			Contents: contents,
-			Passphrase: func() (string, error) {
+		passphrase := cfg.passphrase
+		if passphrase == nil {
+			passphrase = func() (string, error) {
 				pass, err := readSecret(fmt.Sprintf("Enter passphrase for identity file %q:", name))
 				if err != nil {
 					return "", fmt.Errorf("could not read passphrase: %v", err)
 				}
 				return string(pass), nil
-			},
+			}
+		}
+		return []age.Identity{&encryptedIdentity{
+			Contents:   contents,
+			Passphrase: passphrase,
 			NoMatchWarning: func() {
 				warningf("encrypted identity file %q didn't match file's recipients", name)
 			},
