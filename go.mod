@@ -8,9 +8,9 @@ require (
 	github.com/hanwen/go-fuse/v2 v2.1.0
 	github.com/urfave/cli/v2 v2.19.2
 	go.uber.org/multierr v1.8.0
-	golang.org/x/crypto v0.0.0-20221010152910-d6f0a8c073c2
-	golang.org/x/sys v0.0.0-20210903071746-97244b99971b
-	golang.org/x/term v0.0.0-20220919170432-7a66f970e087
+	golang.org/x/crypto v0.14.0
+	golang.org/x/sys v0.13.0
+	golang.org/x/term v0.13.0
 )
 
 require (
@@ -23,6 +23,6 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2 // indirect
+	golang.org/x/net v0.17.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
