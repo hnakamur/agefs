@@ -3,14 +3,14 @@ module github.com/hnakamur/agefs
 go 1.19
 
 require (
-	filippo.io/age v1.1.1
+	filippo.io/age v1.2.1
 	github.com/go-git/go-git/v5 v5.12.0
 	github.com/hanwen/go-fuse/v2 v2.5.1
 	github.com/urfave/cli/v2 v2.19.2
 	go.uber.org/multierr v1.11.0
-	golang.org/x/crypto v0.23.0
-	golang.org/x/sys v0.20.0
-	golang.org/x/term v0.20.0
+	golang.org/x/crypto v0.24.0
+	golang.org/x/sys v0.21.0
+	golang.org/x/term v0.21.0
 )
 
 require (
