@@ -8,9 +8,9 @@ require (
 	github.com/hanwen/go-fuse/v2 v2.5.1
 	github.com/urfave/cli/v2 v2.19.2
 	go.uber.org/multierr v1.11.0
-	golang.org/x/crypto v0.23.0
-	golang.org/x/sys v0.20.0
-	golang.org/x/term v0.20.0
+	golang.org/x/crypto v0.31.0
+	golang.org/x/sys v0.28.0
+	golang.org/x/term v0.27.0
 )
 
 require (
